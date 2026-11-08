@@ -200,12 +200,11 @@ class GaussianLikelihood(SKLearnLikelihood):
 
     def _get_median_prediction(self, model_output: np.ndarray) -> np.ndarray:
         # shape (n_components * output_chunk_length, n_series * n_samples, 2)
-        # [mu, sigma] on the last dimension, grouped by component
+        # [mu, variance] on the last dimension, grouped by component
         k = model_output.shape[1]
-        # extract mu (mean) per component
-        component_medians = slice(0, None, self.num_parameters)
+        # extract mu (mean) per component and move the series / samples axis first before reshaping
         # shape (n_series * n_samples, output_chunk_length, n_components)
-        return model_output[:, :, component_medians].reshape(k, self._n_outputs, -1)
+        return model_output[:, :, 0].transpose().reshape(k, self._n_outputs, -1)
 
 
 class PoissonLikelihood(SKLearnLikelihood):

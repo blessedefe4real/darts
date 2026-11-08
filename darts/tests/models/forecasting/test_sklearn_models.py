@@ -4769,6 +4769,43 @@ class TestProbabilisticSKLearnModels:
             assert mae_err < new_mae + 0.1
             mae_err = new_mae
 
+    @pytest.mark.skipif(not CB_AVAILABLE, reason="requires catboost")
+    @pytest.mark.parametrize(
+        "config",
+        param_product([1, 2], [1, 3], [True, False]),
+    )
+    def test_gaussian_likelihood_median_multiple_series(self, config):
+        """The median (mean) prediction of a model with a Gaussian likelihood must match the predicted `mu`
+        parameter for each series, also when predicting multiple series at once."""
+        n_comp, ocl, multi_models = config
+        rng = np.random.default_rng(0)
+        series = [
+            TimeSeries.from_values(
+                np.sin(np.arange(100)[:, None] / 5 + np.arange(n_comp))
+                + 0.1 * rng.normal(size=(100, n_comp))
+            ),
+            TimeSeries.from_values(5.0 + 0.1 * rng.normal(size=(100, n_comp))),
+        ]
+        model = CatBoostModel(
+            lags=4,
+            output_chunk_length=ocl,
+            multi_models=multi_models,
+            likelihood="gaussian",
+            **cb_test_params,
+        )
+        model.fit(series)
+
+        preds = model.predict(n=ocl, series=series)
+        preds_params = model.predict(
+            n=ocl, series=series, predict_likelihood_parameters=True
+        )
+        for pred, pred_params, series_ in zip(preds, preds_params, series):
+            mu = pred_params.values()[:, 0::2]
+            np.testing.assert_allclose(pred.values(), mu)
+            # predicting multiple series at once gives the same result as predicting each series separately
+            pred_single = model.predict(n=ocl, series=series_)
+            np.testing.assert_allclose(pred.values(), pred_single.values())
+
     @pytest.mark.skipif(not GBM_AVAILABLE, reason="gradient boosting model required")
     @pytest.mark.parametrize(
         "model_config",
